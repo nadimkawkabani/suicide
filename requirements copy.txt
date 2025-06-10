@@ -3,7 +3,4 @@ matplotlib
 seaborn
 numpy
 pandas
-yfinance
-quantstats
-cvxpy
 plotly
