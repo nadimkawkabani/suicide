@@ -1,54 +1,45 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+except ImportError as e:
+    st.error(f"Critical package missing: {e}. Check requirements.txt!")
+    st.stop()
 
 # Configure page
-st.set_page_config(page_title="Suicide Data Analysis", layout="wide")
+st.set_page_config(layout="wide")
 
-# Load data with error handling
+# Load data from URL (more reliable in cloud)
 @st.cache_data
 def load_data():
     try:
-        # Try online first (replace with your actual URL)
-        url = "https://raw.githubusercontent.com/your-username/your-repo/main/who_suicide_statistics.csv"
-        df = pd.read_csv(url)
-        df.dropna(inplace=True)
-        return df
+        url = "https://raw.githubusercontent.com/who/gho-data/main/suicide-statistics.csv"  # Example URL
+        return pd.read_csv(url).dropna()
     except Exception as e:
-        st.error(f"Failed to load data: {e}")
+        st.error(f"Data load failed: {e}")
         return None
 
 df = load_data()
 
 if df is not None:
-    # Sidebar filters
-    st.sidebar.header("Filters")
-    year = st.sidebar.selectbox("Year", sorted(df['year'].unique()))
-    gender = st.sidebar.radio("Gender", df['sex'].unique())
-    age = st.sidebar.selectbox("Age Group", sorted(df['age'].unique()))
-
-    # Filter data
-    filtered = df[(df['year'] == year) & (df['sex'] == gender) & (df['age'] == age)]
-
-    # Metrics
-    st.title("Suicide Statistics Dashboard")
+    st.title("WHO Suicide Data Analysis")
+    
+    # Filters
     col1, col2 = st.columns(2)
-    col1.metric("Total Cases", filtered['suicides_no'].sum())
-    col2.metric("Countries", filtered['country'].nunique())
-
-    # Plot top countries
-    st.subheader(f"Top Countries in {year}")
-    top = filtered.groupby('country')['suicides_no'].sum().nlargest(10)
+    year = col1.selectbox("Year", sorted(df['year'].unique()))
+    age = col2.selectbox("Age Group", sorted(df['age'].unique()))
     
+    # Filter data
+    filtered = df[(df.year == year) & (df.age == age)]
+    
+    # Visualizations
     fig, ax = plt.subplots()
-    sns.barplot(x=top.values, y=top.index, palette="rocket")
+    sns.barplot(
+        data=filtered.nlargest(10, 'suicides_no'),
+        x='suicides_no',
+        y='country',
+        palette='viridis',
+        ax=ax
+    )
     st.pyplot(fig)
-
-    # Global trend plot
-    st.subheader("Historical Trend")
-    trend = df.groupby('year')['suicides_no'].sum().reset_index()
-    
-    fig2, ax2 = plt.subplots()
-    sns.lineplot(data=trend, x='year', y='suicides_no')
-    st.pyplot(fig2)
