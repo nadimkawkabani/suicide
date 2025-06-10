@@ -28,7 +28,6 @@ filtered_df = df[
     (df["sex"] == selected_gender) &
     (df["age"] == selected_age)
 ]
-
 # Display summary
 st.title("📊 Suicide Rates Dashboard")
 st.markdown(f"""
