@@ -2,21 +2,27 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
 
 # Set page config
 st.set_page_config(page_title="Suicide Statistics Analysis", layout="wide")
 
-# Load the dataset
-@st.cache_data  # This decorator caches the data to avoid reloading on every interaction
+# Load data (with caching)
+@st.cache_data
 def load_data():
     try:
+        # Try local file first
         df = pd.read_csv("who_suicide_statistics.csv")
         df.dropna(inplace=True)
         return df
     except FileNotFoundError:
-        st.error("File not found. Please make sure 'who_suicide_statistics.csv' is in the same directory.")
-        return None
+        # Fallback to online file (replace with your actual URL)
+        try:
+            df = pd.read_csv("https://raw.githubusercontent.com/yourusername/yourrepo/main/who_suicide_statistics.csv")
+            df.dropna(inplace=True)
+            return df
+        except Exception as e:
+            st.error(f"Failed to load data: {e}")
+            return None
 
 df = load_data()
 
@@ -25,27 +31,24 @@ if df is not None:
     st.sidebar.header("Filter Data")
     
     # Year selector
-    year_range = sorted(df['year'].unique())
-    selected_year = st.sidebar.select_slider(
+    selected_year = st.sidebar.selectbox(
         "Select Year",
-        options=year_range,
-        value=2010
+        sorted(df['year'].unique()),
+        index=len(df['year'].unique()) - 6  # Default to ~2010
     )
     
     # Gender selector
-    gender_options = df['sex'].unique()
     selected_gender = st.sidebar.radio(
         "Select Gender",
-        gender_options,
+        df['sex'].unique(),
         index=0
     )
     
     # Age group selector
-    age_options = sorted(df['age'].unique())
     selected_age = st.sidebar.selectbox(
         "Select Age Group",
-        age_options,
-        index=age_options.index("35-54 years") if "35-54 years" in age_options else 0
+        sorted(df['age'].unique()),
+        index=3 if "35-54 years" in df['age'].unique() else 0
     )
     
     # Apply filters
@@ -58,52 +61,34 @@ if df is not None:
     # Main content
     st.title("WHO Suicide Statistics Analysis")
     
-    # Display summary metrics
+    # Metrics
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Selected Year", selected_year)
-    with col2:
-        st.metric("Gender", selected_gender)
-    with col3:
-        st.metric("Age Group", selected_age)
+    col1.metric("Total Suicides", f"{filtered_df['suicides_no'].sum():,}")
+    col2.metric("Countries", filtered_df['country'].nunique())
+    col3.metric("Year Analyzed", selected_year)
     
-    st.divider()
+    # Top 10 countries chart
+    st.subheader(f"Top 10 Countries by Suicide Count")
+    top_countries = filtered_df.groupby("country")["suicides_no"].sum().nlargest(10)
     
-    col4, col5 = st.columns(2)
-    with col4:
-        st.metric("Total Suicides", filtered_df['suicides_no'].sum())
-    with col5:
-        st.metric("Countries in Selection", filtered_df['country'].nunique())
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.barplot(x=top_countries.values, y=top_countries.index, palette="viridis", ax=ax)
+    ax.set_xlabel("Number of Suicides")
+    st.pyplot(fig)
     
-    # Top 10 countries
-    st.subheader(f"Top 10 Countries by Suicide Count ({selected_year})")
-    top_countries = filtered_df.groupby("country")["suicides_no"].sum().sort_values(ascending=False).head(10)
-    
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
-    sns.barplot(x=top_countries.values, y=top_countries.index, palette="Blues_r", ax=ax1)
-    ax1.set_title(f"Top 10 Countries by Suicides ({selected_year}, {selected_gender}, {selected_age})")
-    ax1.set_xlabel("Number of Suicides")
-    st.pyplot(fig1)
-    
-    # Global trend plot
-    st.subheader("Global Suicide Trend (1985–2016)")
+    # Global trend
+    st.subheader("Global Suicide Trend Over Time")
     trend_df = df.groupby("year")["suicides_no"].sum().reset_index()
     
-    fig2, ax2 = plt.subplots(figsize=(10, 5))
-    sns.lineplot(x="year", y="suicides_no", data=trend_df, marker="o", ax=ax2)
-    ax2.set_title("Global Suicide Trend Over Time")
+    fig2, ax2 = plt.subplots(figsize=(10, 4))
+    sns.lineplot(data=trend_df, x="year", y="suicides_no", marker="o", ax=ax2)
     ax2.set_xlabel("Year")
     ax2.set_ylabel("Total Suicides")
     st.pyplot(fig2)
     
-    # Show raw data option
-    if st.checkbox("Show filtered raw data"):
-        st.dataframe(filtered_df)
-    
-    # Download button for filtered data
+    # Data download
     st.download_button(
-        label="Download Filtered Data as CSV",
-        data=filtered_df.to_csv(index=False).encode('utf-8'),
-        file_name=f"suicide_data_{selected_year}_{selected_gender}_{selected_age.replace(' ', '_')}.csv",
-        mime='text/csv'
+        "Download Filtered Data",
+        filtered_df.to_csv(index=False),
+        f"suicide_data_{selected_year}_{selected_gender}_{selected_age.replace(' ', '_')}.csv"
     )
